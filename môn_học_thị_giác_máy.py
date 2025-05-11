@@ -1,8 +1,15 @@
+
+
 import streamlit as st
 import time
 import base64
 import os
+import cv2
 
+# Giảm mức log của OpenCV để không in lỗi camera index
+cv2.utils.logging.setLogLevel(cv2.utils.logging.ERROR)
+
+# Cấu hình trang
 # Cấu hình trang
 st.set_page_config(
     page_title="Nội dung môn học",
@@ -10,6 +17,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"  
 )
+
 
 # Hàm đọc và mã hóa file sang Base64
 def get_base64(path):
@@ -36,7 +44,7 @@ css = f"""
     color: #000 !important;
   }}
 
-  /* Nút bấm sidebar */
+  /* Nút bấm sidebar với label rõ ràng */
   [data-testid=\"stSidebar\"] .stButton>button {{
     background: linear-gradient(270deg, #FFF5CC, #E6FFCC, #CCEFFF, #E5CCFF, #FFE5CC);
     background-size: 400% 500%;
@@ -125,7 +133,6 @@ css = f"""
   .section-container {{
     margin:24px auto 0 auto;
     display: inline-block;
-    
     text-align: left;
   }}
   .section-frame {{
@@ -170,7 +177,6 @@ dict_pages = {
     "Phát hiện và nhận dạng đối tượng": "my_pages/2_phat_hien_doi_tuong.py",
     "Thị giác máy": "my_pages/thi_giac_may.py",
     "Các ứng dụng ": "my_pages/cac_ung_dung_khac.py"
-   
 }
 
 if "page" not in st.session_state:
@@ -181,11 +187,11 @@ with st.sidebar:
     st.markdown('<div class="big-text">📚 NỘI DUNG MÔN HỌC </div>', unsafe_allow_html=True)
     if st.session_state.page is None:
         for name, file in dict_pages.items():
-            if st.button(name):
+            if st.button(name, label_visibility="visible"):
                 st.session_state.page = file
                 st.rerun()
     else:
-        if st.button("⬅️ Quay về trang chủ"):
+        if st.button("⬅️ Quay về trang chủ", label_visibility="visible"):
             st.session_state.page = None
             st.rerun()
 
@@ -227,4 +233,7 @@ if st.session_state.page is None:
 else:
     with st.spinner("Đang tải nội dung..."):
         time.sleep(1)
-        exec(open(st.session_state.page, "r", encoding="utf-8").read())
+        try:
+            exec(open(st.session_state.page, "r", encoding="utf-8").read())
+        except Exception as e:
+            st.error(f"Đã xảy ra lỗi khi tải nội dung: {e}")
