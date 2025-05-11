@@ -12,14 +12,11 @@ from ultralytics.utils.downloads import GITHUB_ASSETS_STEMS
 from ultralytics.utils import LOGGER
 from ultralytics.utils.plotting import Annotator
 
-# ==== Thêm WebRTC ====
+# === Thêm WebRTC ===
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 import av
 
-# 💥 Chỉ gọi set_page_config một lần nếu cần
-# st.set_page_config(layout="wide")
-
-# === Hàm hỗ trợ phân loại hình học ===
+# === Các hàm cache gốc ===
 @st.cache_data
 def phan_nguong(imgin: np.ndarray) -> np.ndarray:
     if len(imgin.shape) == 3:
@@ -31,8 +28,7 @@ def phan_nguong(imgin: np.ndarray) -> np.ndarray:
     for x in range(M):
         for y in range(N):
             imgout[x, y] = 255 if gray[x, y] == 63 else 0
-    imgout = cv2.medianBlur(imgout, 7)
-    return imgout
+    return cv2.medianBlur(imgout, 7)
 
 @st.cache_data
 def predict_shape(imgin: np.ndarray) -> (np.ndarray, str):
@@ -50,44 +46,31 @@ def predict_shape(imgin: np.ndarray) -> (np.ndarray, str):
         label = 'Không xác định'
     return bin_img, label
 
-# === Hàm lấy base64 cho video background ===
+# === Hàm lấy Base64 cho video nền ===
 def get_base64(path: str) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-# === CSS & Video Background & Styles (GIỮ NGUYÊN) ===
+# === CSS + Video background (GIỮ NGUYÊN) ===
 video_path = os.path.join(os.path.dirname(__file__), "resources/videos/background_5.mp4")
 video_b64 = get_base64(video_path) if os.path.exists(video_path) else ""
 css = f"""
 <style>
-  /* Gradient sidebar */
   [data-testid="stSidebar"], [data-testid="stSidebarNav"] {{
     background: linear-gradient(135deg,#ccff99,#99ff99,#b2ff66,#66ff66,#99ff33,#33ff33,#80ff00,#00ff00) !important;
-    height: 100vh;
-    padding: 0;
+    height: 100vh; padding: 0;
   }}
-  /* Video nền */
   .video-bg {{
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100vh;
-    object-fit: cover;
-    z-index: -1;
-    opacity: 0.92;
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100vh;
+    object-fit: cover; z-index: -1; opacity: 0.92;
   }}
-  /* Title trắng, viền đen */
   h1 {{
-    color: white !important;
-    text-shadow: 1px 1px 2px black;
+    color: white !important; text-shadow: 1px 1px 2px black;
   }}
-  /* Style cho nhãn ảnh */
   .caption-text {{
-    font-size: 18px;
-    font-weight: bold;
-    color: white !important;
-    margin-bottom: 5px;
+    font-size: 18px; font-weight: bold;
+    color: white !important; margin-bottom: 5px;
     text-shadow: 1px 1px 2px black;
   }}
 </style>
@@ -97,12 +80,11 @@ css = f"""
 """
 st.markdown(css, unsafe_allow_html=True)
 
-# === Class Phát hiện đối tượng (video) ===
+# === Class Inference giữ nguyên phần sidebar + upload + configure ===
 class Inference:
     def __init__(self, **kwargs: Any):
         check_requirements("streamlit>=1.29.0")
         st.title("🔍 Ứng dụng Phát hiện đối tượng")
-        self.st = st
         self.conf = 0.25
         self.iou = 0.45
         self.source = None
@@ -148,29 +130,29 @@ class Inference:
         self.selected_ind = [names.index(c) for c in cls]
 
     def run(self):
-        # 1) Hiển thị sidebar + cấu hình + chọn file/webcam + load model
+        # 1) Sidebar + upload + configure
         self.sidebar()
         self.source_upload()
         self.configure()
 
-        # 2) Start / Stop controls (giữ nguyên vị trí nút trên trang)
+        # 2) Start / Stop (GIỮ NGUYÊN vị trí nút chính giữa)
         if 'obj_running' not in st.session_state:
             st.session_state.obj_running = False
-        if st.button("Start"):
+        col_s, col_t = st.columns(2)
+        if col_s.button("Start"):
             st.session_state.obj_running = True
-        if st.button("Stop"):
+        if col_t.button("Stop"):
             st.session_state.obj_running = False
 
-        # 3) Nếu đang chạy thì:
+        # 3) Nếu đang chạy:
         if st.session_state.obj_running:
-            # --- Trường hợp webcam: dùng WebRTC live từ browser ---
+            # --- WebRTC live (webcam) ---
             if self.source == "webcam":
-                outer = self  # để truy cập self trong processor
+                outer = self  # để truy cập trong lớp
 
                 class ObjectProcessor(VideoProcessorBase):
                     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
                         img_bgr = frame.to_ndarray(format="bgr24")
-                        # Chọn chế độ tracking hay detect
                         if outer.enable_trk == "Yes":
                             res = outer.model.track(
                                 img_bgr, conf=outer.conf, iou=outer.iou,
@@ -181,9 +163,7 @@ class Inference:
                                 img_bgr, conf=outer.conf, iou=outer.iou,
                                 classes=outer.selected_ind
                             )
-                        # Vẽ kết quả
                         out_bgr = res[0].plot()
-                        # Trả về frame đã annotate
                         return av.VideoFrame.from_ndarray(out_bgr, format="bgr24")
 
                 ctx = webrtc_streamer(
@@ -198,13 +178,13 @@ class Inference:
                 else:
                     st.info("⏸️ Nhấn ▶️ để bắt đầu livestream")
 
-            # --- Trường hợp video file: giữ nguyên logic gốc ---
+            # --- Video file (giữ nguyên logic) ---
             else:
                 cap = cv2.VideoCapture(self.vid_file_name)
                 if not cap.isOpened():
                     st.error("Không mở nguồn.")
                     return
-                while cap.isOpened():
+                while cap.isOpened() and st.session_state.obj_running:
                     ok, frame = cap.read()
                     if not ok:
                         break
@@ -219,17 +199,12 @@ class Inference:
                             classes=self.selected_ind
                         )
                     out = res[0].plot()
-                    # Nếu bấm Stop lúc giữa chừng, sẽ tắt
-                    if not st.session_state.obj_running:
-                        cap.release()
-                        break
-                    # Hiển thị frame gốc & annotated
                     self.org_frame.image(frame, channels="BGR")
                     self.ann_frame.image(out, channels="BGR")
                 cap.release()
                 cv2.destroyAllWindows()
 
-# === Hàm Nhận diện trái cây (ảnh) ===
+# === Các chức năng ảnh còn lại giữ nguyên ===
 def fruit_detection():
     st.title("🍎 Nhận diện và phân loại trái cây")
     model = YOLO("yolo11n_trai_cay.pt", task="detect")
@@ -263,7 +238,6 @@ def fruit_detection():
                     mime="image/jpeg"
                 )
 
-# === Hàm Phân loại hình học (ảnh) ===
 def shape_detection():
     st.title("🔷 Nhận diện và phân loại hình học")
     uploaded = st.sidebar.file_uploader('Upload ảnh gốc', type=['png','jpg','jpeg','bmp'])
@@ -291,14 +265,14 @@ def shape_detection():
 
 # === Main ===
 def main():
-    mode = st.sidebar.radio('Chức năng', [
+    choice = st.sidebar.radio('Chức năng', [
         'Phát hiện đối tượng (video)',
         'Nhận diện và phân loại trái cây (ảnh)',
         'Nhận diện và phân loại hình học (ảnh)'
     ])
-    if mode == 'Phát hiện đối tượng (video)':
+    if choice == 'Phát hiện đối tượng (video)':
         Inference().run()
-    elif mode == 'Nhận diện và phân loại trái cây (ảnh)':
+    elif choice == 'Nhận diện và phân loại trái cây (ảnh)':
         fruit_detection()
     else:
         shape_detection()
