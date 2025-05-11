@@ -8,3 +8,4 @@ torchvision
 mediapipe
 ultralytics
 scikit-learn
+streamlit-webrtc
