@@ -6,11 +6,9 @@ import cv2
 
 # === Tắt log/cảnh báo của OpenCV một cách phòng vệ ===
 try:
-    # Nếu có module utils.logging (OpenCV ≥4.x)
     log = getattr(cv2.utils, "logging", None)
     if log:
         log.setLogLevel(log.ERROR)
-    # Ngược lại thử dùng setLogLevel trực tiếp
     elif hasattr(cv2, "setLogLevel"):
         cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
 except Exception:
@@ -77,7 +75,7 @@ dict_pages = {
     "Nhận diện khuôn mặt": "my_pages/1_nhan_dien_khuon_mat.py",
     "Phát hiện và nhận dạng đối tượng": "my_pages/2_phat_hien_doi_tuong.py",
     "Thị giác máy": "my_pages/thi_giac_may.py",
-    "Các ứng dụng ": "my_pages/cac_ung_dung_khac.py"
+    "Các ứng dụng": "my_pages/cac_ung_dung_khac.py"
 }
 
 # Khởi tạo biến lưu trang hiện tại
@@ -90,11 +88,11 @@ with st.sidebar:
     st.markdown('<div class="big-text">📚 NỘI DUNG MÔN HỌC</div>', unsafe_allow_html=True)
     if st.session_state.page is None:
         for name, file in dict_pages.items():
-            if st.button(name, label_visibility="visible"):
+            if st.button(name):
                 st.session_state.page = file
                 st.rerun()
     else:
-        if st.button("⬅️ Quay về trang chủ", label_visibility="visible"):
+        if st.button("⬅️ Quay về trang chủ"):
             st.session_state.page = None
             st.rerun()
 
