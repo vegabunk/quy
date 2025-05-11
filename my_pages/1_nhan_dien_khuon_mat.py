@@ -8,16 +8,17 @@ import os
 import time
 from contextlib import redirect_stderr
 
-# ===== Streamlit WebRTC =====
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+# ===== Thêm WebRTC =====
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 import av
 
+# Cache “null file” để redirect stderr khi mở camera server
 @st.cache_resource
 def suppress_stderr():
     return open(os.devnull, "w")
 
 def main():
-    # --- Background video & CSS (giữ nguyên décor) ---
+    # === Background video & CSS (giữ nguyên) ===
     def get_base64(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -50,7 +51,7 @@ def main():
     """
     st.markdown(css_html, unsafe_allow_html=True)
 
-    # --- Load mô hình Face Detection & Recognition (giữ nguyên) ---
+    # === Load model face detect & recognize (giữ nguyên) ===
     face_detector = cv.FaceDetectorYN.create(
         'face_detection_yunet_2023mar.onnx', '', (320, 320),
         score_threshold=0.9, nms_threshold=0.3, top_k=5000
@@ -91,7 +92,7 @@ def main():
         result = visualize(bgr, faces, detected)
         return cv.cvtColor(result, cv.COLOR_BGR2RGB)
 
-    # --- UI chính ---
+    # === UI chính ===
     st.markdown(
         '<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>',
         unsafe_allow_html=True
@@ -100,6 +101,7 @@ def main():
     mode = st.sidebar.radio("Chế độ", ['Ảnh tĩnh', 'Webcam Live'])
 
     if mode == 'Ảnh tĩnh':
+        # Xử lý ảnh tĩnh (giữ nguyên)
         uploaded_file = st.sidebar.file_uploader("Tải ảnh lên", type=['jpg','png','jpeg','bmp','tif'])
         if uploaded_file:
             img = np.array(Image.open(uploaded_file))
@@ -108,28 +110,42 @@ def main():
                 st.image(img, caption="Ảnh gốc", use_container_width=True)
             with col2:
                 st.image(recognize(img), caption="Kết quả nhận diện", use_container_width=True)
-    else:
-        # --- Live Webcam qua WebRTC ---
-        class FaceProcessor(VideoProcessorBase):
-            def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-                img_bgr = frame.to_ndarray(format="bgr24")
-                img_rgb = cv.cvtColor(img_bgr, cv.COLOR_BGR2RGB)
-                out_rgb = recognize(img_rgb)
-                out_bgr = cv.cvtColor(out_rgb, cv.COLOR_RGB2BGR)
-                return av.VideoFrame.from_ndarray(out_bgr, format="bgr24")
 
-        st.sidebar.markdown("**🔴 Live Webcam Stream**", unsafe_allow_html=True)
-        webrtc_ctx = webrtc_streamer(
-            key="face-stream",
-            mode="SENDRECV",
-            video_processor_factory=FaceProcessor,
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
-        if webrtc_ctx.state.playing:
-            st.success("🎬 Đang livestream và nhận diện…")
-        else:
-            st.info("⏸️ Nhấn ▶️ để bắt đầu livestream")
+    else:
+        # === Live Webcam với Start/Stop + WebRTC ===
+        # State để điều khiển
+        if 'cam_running' not in st.session_state:
+            st.session_state.cam_running = False
+
+        if st.sidebar.button('Start Webcam'):
+            st.session_state.cam_running = True
+        if st.sidebar.button('Stop Webcam'):
+            st.session_state.cam_running = False
+
+        if st.session_state.cam_running:
+            # Định nghĩa processor
+            class FaceProcessor(VideoProcessorBase):
+                def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+                    img_bgr = frame.to_ndarray(format="bgr24")
+                    img_rgb = cv.cvtColor(img_bgr, cv.COLOR_BGR2RGB)
+                    out_rgb = recognize(img_rgb)
+                    out_bgr = cv.cvtColor(out_rgb, cv.COLOR_RGB2BGR)
+                    return av.VideoFrame.from_ndarray(out_bgr, format="bgr24")
+
+            # Khởi chạy WebRTC chỉ khi cam_running=True
+            ctx = webrtc_streamer(
+                key="face-stream",
+                mode=WebRtcMode.SENDRECV,                     # dùng enum, không phải string
+                video_processor_factory=FaceProcessor,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+
+            # Thông báo trạng thái
+            if ctx.state.playing:
+                st.success("🎬 Đang livestream và nhận diện…")
+            else:
+                st.info("⏸️ Nhấn ▶️ để bắt đầu livestream")
 
 if __name__ == '__main__':
     main()
