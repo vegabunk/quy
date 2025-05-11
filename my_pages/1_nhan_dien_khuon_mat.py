@@ -6,19 +6,14 @@ from PIL import Image
 import base64
 import os
 import time
-
-# === Mở rộng: thêm suppress_stderr để tắt log OpenCV về camera ===
 import sys
 from contextlib import redirect_stderr
 
 @st.cache_resource
 def suppress_stderr():
-    # Trả về file object /dev/null để redirect
     return open(os.devnull, "w")
 
-# Main function
 def main():
-    # Load video as base64
     def get_base64(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -26,14 +21,11 @@ def main():
     video_path = "resources/videos/background_7.mp4"
     video_b64 = get_base64(video_path) if os.path.exists(video_path) else ""
 
-    # CSS + HTML injection (only sidebar gradient and video background)
     css_html = f"""
     <style>
-    /* Cover entire sidebar with gradient from light pink to dark pink */
     [data-testid="stSidebar"] {{
         background: linear-gradient(135deg, #ffc0cb, #ff69b4) !important;
     }}
-    /* Video background behind content */
     .video-bg {{
         position: fixed;
         top: 0;
@@ -43,7 +35,6 @@ def main():
         z-index: -2;
         object-fit: cover;
     }}
-    /* Dark overlay above video */
     .overlay {{
         position: fixed;
         top: 0;
@@ -53,7 +44,6 @@ def main():
         z-index: -1;
         background-color: rgba(0, 0, 0, 0.1);
     }}
-    /* Transparent main container */
     [data-testid="stAppViewContainer"] {{
         background-color: transparent !important;
     }}
@@ -65,7 +55,6 @@ def main():
     """
     st.markdown(css_html, unsafe_allow_html=True)
 
-    # Load face detection and recognition models
     face_detector = cv.FaceDetectorYN.create(
         'face_detection_yunet_2023mar.onnx', '', (320, 320),
         score_threshold=0.9, nms_threshold=0.3, top_k=5000
@@ -76,7 +65,6 @@ def main():
     svc = joblib.load('svc.pkl')
     names_list = ['GIATHIEU', 'LEQUYEN', 'THANHQUY']
 
-    # Function to draw rectangles and labels
     def visualize(img, faces, names):
         if faces[1] is not None:
             for i, face in enumerate(faces[1][:3]):
@@ -87,7 +75,6 @@ def main():
                                cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         return img
 
-    # Function to recognize faces in a frame
     def recognize(frame):
         bgr = cv.cvtColor(frame, cv.COLOR_RGB2BGR)
         h, w = bgr.shape[:2]
@@ -107,17 +94,12 @@ def main():
         result = visualize(bgr, faces, detected)
         return cv.cvtColor(result, cv.COLOR_BGR2RGB)
 
-    # Function to run webcam loop
-    def webcam_loop():
-        # === Mở rộng: mở camera trong context redirect_stderr ===
+    def webcam_loop(cam_idx):
         with redirect_stderr(suppress_stderr()):
-            cap = cv.VideoCapture(0)
-
-        # Kiểm tra ngay sau khi mở camera
+            cap = cv.VideoCapture(cam_idx)
         if not cap.isOpened():
-            st.sidebar.error("🔴 Không thể mở camera với index 0. Vui lòng kiểm tra kết nối hoặc chọn chế độ 'Ảnh tĩnh'.")
+            st.sidebar.error(f"🔴 Không thể mở camera với index {cam_idx}. Vui lòng kiểm tra kết nối hoặc chọn chế độ 'Ảnh tĩnh'.")
             return
-
         placeholder = st.empty()
         while st.session_state.get('webcam', False):
             ret, frame = cap.read()
@@ -128,16 +110,16 @@ def main():
             placeholder.image(recognize(rgb), channels='RGB', use_container_width=True)
         cap.release()
 
-    # UI elements
     st.markdown(
         '<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>',
         unsafe_allow_html=True
     )
-    st.sidebar.markdown('<h3>🎛️ Chọn chế độ</h3>', unsafe_allow_html=True)
-    mode = st.sidebar.radio('', ['Ảnh tĩnh', 'Webcam'])
 
+    st.sidebar.markdown('<h3>🎛️ Chọn chế độ</h3>', unsafe_allow_html=True)
+    mode = st.sidebar.radio("Chế độ", ['Ảnh tĩnh', 'Webcam'])
+    
     if mode == 'Ảnh tĩnh':
-        uploaded_file = st.sidebar.file_uploader('', type=['jpg', 'png', 'jpeg','bmp','tif'])
+        uploaded_file = st.sidebar.file_uploader("Tải ảnh lên", type=['jpg','png','jpeg','bmp','tif'])
         if uploaded_file:
             img = np.array(Image.open(uploaded_file))
             col1, col2 = st.columns(2)
@@ -146,14 +128,16 @@ def main():
             with col2:
                 st.image(recognize(img), use_container_width=True)
     else:
+        # **Thêm** widget chọn camera index
+        cam_idx = st.sidebar.number_input("Chọn camera index", min_value=0, max_value=5, value=0, step=1)
         if 'webcam' not in st.session_state:
             st.session_state['webcam'] = False
-        if st.button('Start Webcam'):
+        if st.sidebar.button('Start Webcam'):
             st.session_state['webcam'] = True
-        if st.button('Stop Webcam'):
+        if st.sidebar.button('Stop Webcam'):
             st.session_state['webcam'] = False
         if st.session_state['webcam']:
-            webcam_loop()
+            webcam_loop(cam_idx)
 
 if __name__ == '__main__':
     main()
