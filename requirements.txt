@@ -10,3 +10,4 @@ ultralytics
 scikit-learn
 streamlit-webrtc
 av
+lap>=0.5.12
