@@ -12,6 +12,10 @@ from ultralytics.utils.downloads import GITHUB_ASSETS_STEMS
 from ultralytics.utils import LOGGER
 from ultralytics.utils.plotting import Annotator
 
+# ==== Thêm WebRTC ====
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
+import av
+
 # 💥 Chỉ gọi set_page_config một lần nếu cần
 # st.set_page_config(layout="wide")
 
@@ -51,14 +55,14 @@ def get_base64(path: str) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-# === CSS & Video Background & Styles ===
+# === CSS & Video Background & Styles (GIỮ NGUYÊN) ===
 video_path = os.path.join(os.path.dirname(__file__), "resources/videos/background_5.mp4")
 video_b64 = get_base64(video_path) if os.path.exists(video_path) else ""
 css = f"""
 <style>
   /* Gradient sidebar */
   [data-testid="stSidebar"], [data-testid="stSidebarNav"] {{
-    background: linear-gradient(135deg,#ccff99,#99ff99,#b2ff66,#66ff66,#99ff33, #33ff33, #80ff00, #00ff00) !important;
+    background: linear-gradient(135deg,#ccff99,#99ff99,#b2ff66,#66ff66,#99ff33,#33ff33,#80ff00,#00ff00) !important;
     height: 100vh;
     padding: 0;
   }}
@@ -125,7 +129,7 @@ class Inference:
     def source_upload(self):
         self.vid_file_name = 0
         if self.source == "video":
-            vid = st.sidebar.file_uploader("Upload video", type=["mp4", "mov", "avi", "mkv"])
+            vid = st.sidebar.file_uploader("Upload video", type=["mp4","mov","avi","mkv"])
             if vid is not None:
                 content = io.BytesIO(vid.read())
                 with open("ultra.mp4", "wb") as f:
@@ -133,7 +137,7 @@ class Inference:
                 self.vid_file_name = "ultra.mp4"
 
     def configure(self):
-        models = [x.replace("yolo", "YOLO") for x in GITHUB_ASSETS_STEMS if x.startswith("yolo11")] 
+        models = [x.replace("yolo","YOLO") for x in GITHUB_ASSETS_STEMS if x.startswith("yolo11")]
         if self.model_path:
             models.insert(0, self.model_path.split(".pt")[0])
         sel = st.sidebar.selectbox("Chọn model", models)
@@ -144,43 +148,92 @@ class Inference:
         self.selected_ind = [names.index(c) for c in cls]
 
     def run(self):
+        # 1) Hiển thị sidebar + cấu hình + chọn file/webcam + load model
         self.sidebar()
         self.source_upload()
         self.configure()
+
+        # 2) Start / Stop controls (giữ nguyên vị trí nút trên trang)
+        if 'obj_running' not in st.session_state:
+            st.session_state.obj_running = False
         if st.button("Start"):
-            stop = st.button("Stop")
-            cap = cv2.VideoCapture(self.vid_file_name)
-            if not cap.isOpened():
-                st.error("Không mở nguồn.")
-                return
-            while cap.isOpened():
-                ok, frame = cap.read()
-                if not ok:
-                    break
-                if self.enable_trk == "Yes":
-                    res = self.model.track(
-                        frame, conf=self.conf, iou=self.iou,
-                        classes=self.selected_ind, persist=True
-                    )
+            st.session_state.obj_running = True
+        if st.button("Stop"):
+            st.session_state.obj_running = False
+
+        # 3) Nếu đang chạy thì:
+        if st.session_state.obj_running:
+            # --- Trường hợp webcam: dùng WebRTC live từ browser ---
+            if self.source == "webcam":
+                outer = self  # để truy cập self trong processor
+
+                class ObjectProcessor(VideoProcessorBase):
+                    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+                        img_bgr = frame.to_ndarray(format="bgr24")
+                        # Chọn chế độ tracking hay detect
+                        if outer.enable_trk == "Yes":
+                            res = outer.model.track(
+                                img_bgr, conf=outer.conf, iou=outer.iou,
+                                classes=outer.selected_ind, persist=True
+                            )
+                        else:
+                            res = outer.model(
+                                img_bgr, conf=outer.conf, iou=outer.iou,
+                                classes=outer.selected_ind
+                            )
+                        # Vẽ kết quả
+                        out_bgr = res[0].plot()
+                        # Trả về frame đã annotate
+                        return av.VideoFrame.from_ndarray(out_bgr, format="bgr24")
+
+                ctx = webrtc_streamer(
+                    key="obj-detector",
+                    mode=WebRtcMode.SENDRECV,
+                    media_stream_constraints={"video": True, "audio": False},
+                    video_processor_factory=ObjectProcessor,
+                    async_processing=True,
+                )
+                if ctx.state.playing:
+                    st.success("🎬 Đang livestream và phát hiện đối tượng…")
                 else:
-                    res = self.model(
-                        frame, conf=self.conf, iou=self.iou,
-                        classes=self.selected_ind
-                    )
-                out = res[0].plot()
-                if stop:
-                    cap.release()
-                    st.stop()
-                self.org_frame.image(frame, channels="BGR")
-                self.ann_frame.image(out, channels="BGR")
-            cap.release()
-            cv2.destroyAllWindows()
+                    st.info("⏸️ Nhấn ▶️ để bắt đầu livestream")
+
+            # --- Trường hợp video file: giữ nguyên logic gốc ---
+            else:
+                cap = cv2.VideoCapture(self.vid_file_name)
+                if not cap.isOpened():
+                    st.error("Không mở nguồn.")
+                    return
+                while cap.isOpened():
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+                    if self.enable_trk == "Yes":
+                        res = self.model.track(
+                            frame, conf=self.conf, iou=self.iou,
+                            classes=self.selected_ind, persist=True
+                        )
+                    else:
+                        res = self.model(
+                            frame, conf=self.conf, iou=self.iou,
+                            classes=self.selected_ind
+                        )
+                    out = res[0].plot()
+                    # Nếu bấm Stop lúc giữa chừng, sẽ tắt
+                    if not st.session_state.obj_running:
+                        cap.release()
+                        break
+                    # Hiển thị frame gốc & annotated
+                    self.org_frame.image(frame, channels="BGR")
+                    self.ann_frame.image(out, channels="BGR")
+                cap.release()
+                cv2.destroyAllWindows()
 
 # === Hàm Nhận diện trái cây (ảnh) ===
 def fruit_detection():
     st.title("🍎 Nhận diện và phân loại trái cây")
     model = YOLO("yolo11n_trai_cay.pt", task="detect")
-    buf = st.sidebar.file_uploader("Upload ảnh", type=["bmp", "png", "jpg", "jpeg", "tif"])
+    buf = st.sidebar.file_uploader("Upload ảnh", type=["bmp","png","jpg","jpeg","tif"])
     if buf is not None:
         img = Image.open(buf).convert("RGB")
         col1, col2 = st.columns(2)
@@ -212,8 +265,8 @@ def fruit_detection():
 
 # === Hàm Phân loại hình học (ảnh) ===
 def shape_detection():
-    st.title("🔷  Nhận diện và phân loại hình học")
-    uploaded = st.sidebar.file_uploader('Upload ảnh gốc', type=['png', 'jpg', 'jpeg', 'bmp'])
+    st.title("🔷 Nhận diện và phân loại hình học")
+    uploaded = st.sidebar.file_uploader('Upload ảnh gốc', type=['png','jpg','jpeg','bmp'])
     if uploaded is not None:
         img = Image.open(uploaded).convert('RGB')
         img_np = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -229,13 +282,12 @@ def shape_detection():
                 font = ImageFont.truetype('resources/fonts/Arial.ttf', 40)
             except:
                 font = ImageFont.load_default()
-            draw.text((10, 30), label, font=font, fill=(0, 255, 0))
+            draw.text((10, 30), label, font=font, fill=(0,255,0))
             with col2:
                 st.markdown("<div class='caption-text'>Ảnh chú thích</div>", unsafe_allow_html=True)
                 st.image(pil, use_container_width=True)
                 st.markdown("<div class='caption-text'>Ảnh nhị phân</div>", unsafe_allow_html=True)
                 st.image(bin_img, use_container_width=True)
-   
 
 # === Main ===
 def main():
