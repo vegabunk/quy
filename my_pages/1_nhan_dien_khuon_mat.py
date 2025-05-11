@@ -14,6 +14,7 @@ def suppress_stderr():
     return open(os.devnull, "w")
 
 def main():
+    # --- Phần background, sidebar, load model... giữ nguyên ---
     def get_base64(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -94,12 +95,22 @@ def main():
         result = visualize(bgr, faces, detected)
         return cv.cvtColor(result, cv.COLOR_BGR2RGB)
 
-    def webcam_loop(cam_idx):
-        with redirect_stderr(suppress_stderr()):
-            cap = cv.VideoCapture(cam_idx)
-        if not cap.isOpened():
-            st.sidebar.error(f"🔴 Không thể mở camera với index {cam_idx}. Vui lòng kiểm tra kết nối hoặc chọn chế độ 'Ảnh tĩnh'.")
+    # --- Chỉnh phần này để tự dò camera index 0–4 ---
+    def webcam_loop():
+        cap = None
+        # thử các index 0..4
+        for idx in range(5):
+            with redirect_stderr(suppress_stderr()):
+                temp = cv.VideoCapture(idx)
+            if temp.isOpened():
+                cap = temp
+                break
+            else:
+                temp.release()
+        if cap is None or not cap.isOpened():
+            st.sidebar.error("🔴 Không tìm thấy camera. Vui lòng cắm camera hoặc chuyển sang 'Ảnh tĩnh'.")
             return
+
         placeholder = st.empty()
         while st.session_state.get('webcam', False):
             ret, frame = cap.read()
@@ -110,14 +121,14 @@ def main():
             placeholder.image(recognize(rgb), channels='RGB', use_container_width=True)
         cap.release()
 
+    # --- UI giữ nguyên ---
     st.markdown(
         '<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>',
         unsafe_allow_html=True
     )
-
     st.sidebar.markdown('<h3>🎛️ Chọn chế độ</h3>', unsafe_allow_html=True)
     mode = st.sidebar.radio("Chế độ", ['Ảnh tĩnh', 'Webcam'])
-    
+
     if mode == 'Ảnh tĩnh':
         uploaded_file = st.sidebar.file_uploader("Tải ảnh lên", type=['jpg','png','jpeg','bmp','tif'])
         if uploaded_file:
@@ -128,8 +139,6 @@ def main():
             with col2:
                 st.image(recognize(img), use_container_width=True)
     else:
-        # **Thêm** widget chọn camera index
-        cam_idx = st.sidebar.number_input("Chọn camera index", min_value=0, max_value=5, value=0, step=1)
         if 'webcam' not in st.session_state:
             st.session_state['webcam'] = False
         if st.sidebar.button('Start Webcam'):
@@ -137,7 +146,7 @@ def main():
         if st.sidebar.button('Stop Webcam'):
             st.session_state['webcam'] = False
         if st.session_state['webcam']:
-            webcam_loop(cam_idx)
+            webcam_loop()
 
 if __name__ == '__main__':
     main()
