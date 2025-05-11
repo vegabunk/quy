@@ -4,7 +4,12 @@ import base64
 import os
 
 # Cấu hình trang
-st.set_page_config(page_title="Nội dung môn học", page_icon="📸", layout="wide")
+st.set_page_config(
+    page_title="Nội dung môn học",
+    page_icon="📸",
+    layout="wide",
+    initial_sidebar_state="expanded"  
+)
 
 # Hàm đọc và mã hóa file sang Base64
 def get_base64(path):
