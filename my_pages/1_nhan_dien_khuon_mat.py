@@ -8,13 +8,16 @@ import os
 import time
 from contextlib import redirect_stderr
 
-# Cache một “null file” để redirect stderr (dùng khi mở camera server)
+# ===== Streamlit WebRTC =====
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
+
 @st.cache_resource
 def suppress_stderr():
     return open(os.devnull, "w")
 
 def main():
-    # --- Background video & CSS (giữ nguyên) ---
+    # --- Background video & CSS (giữ nguyên décor) ---
     def get_base64(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -47,7 +50,7 @@ def main():
     """
     st.markdown(css_html, unsafe_allow_html=True)
 
-    # --- Load mô hình Face Detection & Recognition ---
+    # --- Load mô hình Face Detection & Recognition (giữ nguyên) ---
     face_detector = cv.FaceDetectorYN.create(
         'face_detection_yunet_2023mar.onnx', '', (320, 320),
         score_threshold=0.9, nms_threshold=0.3, top_k=5000
@@ -58,7 +61,6 @@ def main():
     svc = joblib.load('svc.pkl')
     names_list = ['GIATHIEU', 'LEQUYEN', 'THANHQUY']
 
-    # Vẽ bounding box + label
     def visualize(img, faces, names):
         if faces[1] is not None:
             for i, face in enumerate(faces[1][:3]):
@@ -69,9 +71,9 @@ def main():
                                cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
         return img
 
-    # Nhận diện trên 1 frame RGB
-    def recognize(frame):
-        bgr = cv.cvtColor(frame, cv.COLOR_RGB2BGR)
+    def recognize(frame_rgb):
+        # frame_rgb: numpy array, format RGB
+        bgr = cv.cvtColor(frame_rgb, cv.COLOR_RGB2BGR)
         h, w = bgr.shape[:2]
         face_detector.setInputSize((w, h))
         faces = face_detector.detect(bgr)
@@ -89,16 +91,15 @@ def main():
         result = visualize(bgr, faces, detected)
         return cv.cvtColor(result, cv.COLOR_BGR2RGB)
 
-    # --- Giao diện chính ---
+    # --- UI chính ---
     st.markdown(
         '<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>',
         unsafe_allow_html=True
     )
     st.sidebar.markdown('<h3>🎛️ Chọn chế độ</h3>', unsafe_allow_html=True)
-    mode = st.sidebar.radio("Chế độ", ['Ảnh tĩnh', 'Webcam'])
+    mode = st.sidebar.radio("Chế độ", ['Ảnh tĩnh', 'Webcam Live'])
 
     if mode == 'Ảnh tĩnh':
-        # Xử lý ảnh tĩnh nguyên bản
         uploaded_file = st.sidebar.file_uploader("Tải ảnh lên", type=['jpg','png','jpeg','bmp','tif'])
         if uploaded_file:
             img = np.array(Image.open(uploaded_file))
@@ -107,47 +108,28 @@ def main():
                 st.image(img, caption="Ảnh gốc", use_container_width=True)
             with col2:
                 st.image(recognize(img), caption="Kết quả nhận diện", use_container_width=True)
-
     else:
-        # Khởi tạo trạng thái Start/Stop
-        if 'cam_running' not in st.session_state:
-            st.session_state.cam_running = False
+        # --- Live Webcam qua WebRTC ---
+        class FaceProcessor(VideoProcessorBase):
+            def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+                img_bgr = frame.to_ndarray(format="bgr24")
+                img_rgb = cv.cvtColor(img_bgr, cv.COLOR_BGR2RGB)
+                out_rgb = recognize(img_rgb)
+                out_bgr = cv.cvtColor(out_rgb, cv.COLOR_RGB2BGR)
+                return av.VideoFrame.from_ndarray(out_bgr, format="bgr24")
 
-        if st.sidebar.button('Start Webcam'):
-            st.session_state.cam_running = True
-        if st.sidebar.button('Stop Webcam'):
-            st.session_state.cam_running = False
-
-        # Nếu đang “bật” webcam
-        if st.session_state.cam_running:
-            # --- Thử mở camera server ---
-            with redirect_stderr(suppress_stderr()):
-                cap = cv.VideoCapture(0)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                cap.release()
-                if not ret:
-                    st.error("⚠️ Không đọc được khung hình từ camera server.")
-                else:
-                    rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-                    st.image(
-                        recognize(rgb),
-                        caption="Kết quả nhận diện",
-                        channels='RGB',
-                        use_container_width=True
-                    )
-            else:
-                # --- Fallback: dùng camera browser ---
-                st.info("🟡 Không tìm thấy camera server, sử dụng camera của trình duyệt.")
-                img_buffer = st.camera_input("Chụp ảnh từ webcam")
-                if img_buffer:
-                    img = np.array(Image.open(img_buffer))
-                    st.image(img, caption="Ảnh gốc", use_container_width=True)
-                    st.image(
-                        recognize(img),
-                        caption="Kết quả nhận diện",
-                        use_container_width=True
-                    )
+        st.sidebar.markdown("**🔴 Live Webcam Stream**", unsafe_allow_html=True)
+        webrtc_ctx = webrtc_streamer(
+            key="face-stream",
+            mode="SENDRECV",
+            video_processor_factory=FaceProcessor,
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
+        if webrtc_ctx.state.playing:
+            st.success("🎬 Đang livestream và nhận diện…")
+        else:
+            st.info("⏸️ Nhấn ▶️ để bắt đầu livestream")
 
 if __name__ == '__main__':
     main()
