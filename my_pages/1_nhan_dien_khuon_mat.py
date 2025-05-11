@@ -7,8 +7,16 @@ import base64
 import os
 import time
 
-# Main function
+# === Mở rộng: thêm suppress_stderr để tắt log OpenCV về camera ===
+import sys
+from contextlib import redirect_stderr
 
+@st.cache_resource
+def suppress_stderr():
+    # Trả về file object /dev/null để redirect
+    return open(os.devnull, "w")
+
+# Main function
 def main():
     # Load video as base64
     def get_base64(path):
@@ -69,20 +77,14 @@ def main():
     names_list = ['GIATHIEU', 'LEQUYEN', 'THANHQUY']
 
     # Function to draw rectangles and labels
-        # Function to draw rectangles and labels
     def visualize(img, faces, names):
-        # faces[1] contains detection results: each row [x, y, w, h, score]
         if faces[1] is not None:
             for i, face in enumerate(faces[1][:3]):
-                # Extract only x, y, w, h
-                x = int(face[0])
-                y = int(face[1])
-                w = int(face[2])
-                h = int(face[3])
-                # Draw rectangle and label
+                x, y, w, h = map(int, face[:4])
                 cv.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 if i < len(names):
-                    cv.putText(img, names[i], (x, y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    cv.putText(img, names[i], (x, y - 10),
+                               cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         return img
 
     # Function to recognize faces in a frame
@@ -107,18 +109,30 @@ def main():
 
     # Function to run webcam loop
     def webcam_loop():
-        cap = cv.VideoCapture(0)
+        # === Mở rộng: mở camera trong context redirect_stderr ===
+        with redirect_stderr(suppress_stderr()):
+            cap = cv.VideoCapture(0)
+
+        # Kiểm tra ngay sau khi mở camera
+        if not cap.isOpened():
+            st.sidebar.error("🔴 Không thể mở camera với index 0. Vui lòng kiểm tra kết nối hoặc chọn chế độ 'Ảnh tĩnh'.")
+            return
+
         placeholder = st.empty()
         while st.session_state.get('webcam', False):
             ret, frame = cap.read()
             if not ret:
+                st.error("⚠️ Không đọc được khung hình từ camera.")
                 break
             rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
             placeholder.image(recognize(rgb), channels='RGB', use_container_width=True)
         cap.release()
 
     # UI elements
-    st.markdown('<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>', unsafe_allow_html=True)
+    st.markdown(
+        '<h1 style="text-align:left; color:#330000;">🔮 Ứng dụng nhận diện khuôn mặt</h1>',
+        unsafe_allow_html=True
+    )
     st.sidebar.markdown('<h3>🎛️ Chọn chế độ</h3>', unsafe_allow_html=True)
     mode = st.sidebar.radio('', ['Ảnh tĩnh', 'Webcam'])
 
