@@ -130,10 +130,12 @@ def main():
                     st.error("⚠️ Không đọc được khung hình từ camera server.")
                 else:
                     rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-                    st.image(recognize(rgb),
-                             caption="Kết quả nhận diện",
-                             channels='RGB',
-                             use_container_width=True)
+                    st.image(
+                        recognize(rgb),
+                        caption="Kết quả nhận diện",
+                        channels='RGB',
+                        use_container_width=True
+                    )
             else:
                 # --- Fallback: dùng camera browser ---
                 st.info("🟡 Không tìm thấy camera server, sử dụng camera của trình duyệt.")
@@ -141,9 +143,11 @@ def main():
                 if img_buffer:
                     img = np.array(Image.open(img_buffer))
                     st.image(img, caption="Ảnh gốc", use_container_width=True)
-                    st.image(recognize(img),
-                             caption="Kết quả nhận diện",
-                             use_container_width=True)
+                    st.image(
+                        recognize(img),
+                        caption="Kết quả nhận diện",
+                        use_container_width=True
+                    )
 
 if __name__ == '__main__':
     main()
