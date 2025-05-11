@@ -58,7 +58,7 @@ css = f"""
 <style>
   /* Gradient sidebar */
   [data-testid="stSidebar"], [data-testid="stSidebarNav"] {{
-    background: linear-gradient(135deg, #e0f2e9, #3c8d15) !important;
+    background: linear-gradient(135deg,#ccff99,#99ff99,#b2ff66,#66ff66,#99ff33, #33ff33, #80ff00, #00ff00) !important;
     height: 100vh;
     padding: 0;
   }}
@@ -178,7 +178,7 @@ class Inference:
 
 # === Hàm Nhận diện trái cây (ảnh) ===
 def fruit_detection():
-    st.title("🍎 Nhận diện trái cây")
+    st.title("🍎 Nhận diện và phân loại trái cây")
     model = YOLO("yolo11n_trai_cay.pt", task="detect")
     buf = st.sidebar.file_uploader("Upload ảnh", type=["bmp", "png", "jpg", "jpeg", "tif"])
     if buf is not None:
@@ -212,7 +212,7 @@ def fruit_detection():
 
 # === Hàm Phân loại hình học (ảnh) ===
 def shape_detection():
-    st.title("🔷 Phân loại hình học")
+    st.title("🔷  Nhận diện và phân loại hình học")
     uploaded = st.sidebar.file_uploader('Upload ảnh gốc', type=['png', 'jpg', 'jpeg', 'bmp'])
     if uploaded is not None:
         img = Image.open(uploaded).convert('RGB')
@@ -241,12 +241,12 @@ def shape_detection():
 def main():
     mode = st.sidebar.radio('Chức năng', [
         'Phát hiện đối tượng (video)',
-        'Phân loại trái cây (ảnh)',
-        'Phân loại hình học (ảnh)'
+        'Nhận diện và phân loại trái cây (ảnh)',
+        'Nhận diện và phân loại hình học (ảnh)'
     ])
     if mode == 'Phát hiện đối tượng (video)':
         Inference().run()
-    elif mode == 'Phân loại trái cây (ảnh)':
+    elif mode == 'Nhận diện và phân loại trái cây (ảnh)':
         fruit_detection()
     else:
         shape_detection()

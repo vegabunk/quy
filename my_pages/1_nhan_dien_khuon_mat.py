@@ -123,7 +123,7 @@ def main():
     mode = st.sidebar.radio('', ['Ảnh tĩnh', 'Webcam'])
 
     if mode == 'Ảnh tĩnh':
-        uploaded_file = st.sidebar.file_uploader('', type=['jpg', 'png', 'jpeg'])
+        uploaded_file = st.sidebar.file_uploader('', type=['jpg', 'png', 'jpeg','bmp','tif'])
         if uploaded_file:
             img = np.array(Image.open(uploaded_file))
             col1, col2 = st.columns(2)

@@ -50,7 +50,7 @@ def ConvexHull(imgin):
     return imgout
 
 def DefectDetect(imgin):
-    img = ensure_uint8(imgin)
+    imgin = ensure_uint8(imgin)
     imgout = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if not contours: return imgout
@@ -89,18 +89,27 @@ def ConnectedComponents(imgin):
     return out
 
 def RemoveSmallRice(imgin):
-    img = ensure_uint8(imgin)
-    w = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(81,81))
-    tophat = cv2.morphologyEx(img, cv2.MORPH_TOPHAT, w)
-    _,th = cv2.threshold(tophat,120,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    num, labels = cv2.connectedComponents(th)
-    counts = np.bincount(labels.flatten())
-    maxc = counts.max()
-    out = np.zeros_like(img)
-    for i in range(1,num):
-        if counts[i] > 0.7*maxc:
-            out[labels==i] = 255
-    return out
+    w = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (81,81)) 
+    temp = cv2.morphologyEx(imgin, cv2.MORPH_TOPHAT, w)
+    nguong = 120 
+    _,temp = cv2.threshold(temp, nguong, L-1, cv2.THRESH_BINARY |cv2.THRESH_OTSU)
+    dem, label = cv2.connectedComponents(temp , None, )
+    a = np.zeros(dem, np.int32)
+    M,N = label.shape
+    for x in range (0,M):
+        for y in range(0,N):
+            r = label[x,y]
+            if r >0:
+                a[r] = a[r] + 1
+    max_value = np.max(a)
+    imgout = np.zeros((M,N), np.uint8)
+    for x in range (0,M):
+        for y in range(0,N):
+            r = label[x,y]
+            if r >0:
+                if a[r] >0.7*max_value:
+                 imgout[x,y] = L-1
+    return imgout 
 
 # CSS nền
 page_bg_img = """

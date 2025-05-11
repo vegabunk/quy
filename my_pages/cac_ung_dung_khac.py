@@ -214,7 +214,7 @@ def main():
             st.subheader('**3. Phong cách ảnh của bạn**')
             if uploaded is not None and 'style_btn' in locals() and style_btn:
                 style_dict = {
-                    'Phong cách trừu tượng': 'weights/best_model-Post_Impressionism.pth',
+                    'Phong cách Hậu ấn tượng': 'weights/best_model-Post_Impressionism.pth',
                     'Phong cách Lập thể': 'weights/best_model-Cubism.pth',
                     'Phong cách Trừu tượng': 'weights/best_model-Abstract_Expressionism.pth',
                     'Phong cách Số hóa': 'weights/best_model-Digital_Painting.pth'
